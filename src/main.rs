@@ -1,8 +1,9 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, sync::Arc, time::Instant};
 
 use anyhow::{anyhow, Result};
 use futures_util::StreamExt;
 use quinn::{ClientConfig, Endpoint, ServerConfig};
+use rand::{distributions::Alphanumeric, Rng};
 use rustls_pemfile::Item;
 
 #[tokio::main]
@@ -43,20 +44,46 @@ async fn client(socket: SocketAddr) -> Result<()> {
         .await
         .map_err(|e| anyhow!("failed to open stream: {}", e))?;
 
-    for i in 0..16 {
-        let msg = vec![0; (2usize).pow(i)];
-        let size = (msg.len() as u32).to_le_bytes();
-        println!("Message {i}: {} bytes", msg.len());
-        send.write_all(&size).await?;
-        send.write_all(&msg).await?;
+    let byte_sizes: Vec<usize> = (2..8)
+        .collect::<Vec<u32>>()
+        .iter()
+        .map(|i| 10_usize.pow(*i))
+        .collect();
+    let request_nums: Vec<usize> = (2..5)
+        .collect::<Vec<u32>>()
+        .iter()
+        .map(|i| 10_usize.pow(*i))
+        .collect();
 
-        let mut size = [0u8; 4];
-        recv.read_exact(&mut size).await?;
-        let size = u32::from_le_bytes(size);
-        println!("Reading msg with {} bytes", size);
-        let mut buffer = vec![0u8; size as usize];
-        recv.read_exact(&mut buffer).await?;
-        println!("Received msg with {} bytes", buffer.len());
+    let mut rtts = vec![];
+
+    for size in byte_sizes {
+        for num in &request_nums {
+            for _ in 0..*num {
+                let msg: String = rand::thread_rng()
+                    .sample_iter(&Alphanumeric)
+                    .take(size)
+                    .map(char::from)
+                    .collect();
+                let t = Instant::now();
+                let msg = bincode::serialize(&msg).unwrap();
+                let size = (msg.len() as u32).to_le_bytes();
+                send.write_all(&size).await?;
+                send.write_all(&msg).await?;
+
+                let mut size = [0u8; 4];
+                recv.read_exact(&mut size).await?;
+                let size = u32::from_le_bytes(size);
+                let mut buffer = vec![0u8; size as usize];
+                recv.read_exact(&mut buffer).await?;
+                let _ = bincode::deserialize::<String>(&buffer).unwrap();
+                rtts.push(t.elapsed().as_secs_f32());
+            }
+            let bs = size as f32 / (rtts.iter().sum::<f32>() / *num as f32);
+            let mbs = bs / 1_000_000 as f32;
+            let b = size as f32 / 1_000_000 as f32;
+            println!("sending {b} Mb, requests {num}, throughtput {mbs} Mbs");
+        }
     }
     Ok(())
 }
@@ -116,12 +143,13 @@ async fn handle_conn(connection: quinn::Connecting) -> Result<()> {
             println!("Reading msg with {} bytes", size);
             let mut buffer = vec![0u8; size as usize];
             recv.read_exact(&mut buffer).await?;
+            let s: String = bincode::deserialize(&buffer).unwrap();
             println!("Recv msg with {} bytes", buffer.len());
 
-            let msg: Vec<u8> = vec![1, 2, 3, 4];
-            let size = (msg.len() as u32).to_le_bytes();
+            let buffer = bincode::serialize(&s).unwrap();
+            let size = (buffer.len() as u32).to_le_bytes();
             send.write_all(&size).await?;
-            send.write_all(&msg).await?;
+            send.write_all(&buffer).await?;
         }
     }
     Ok(())
