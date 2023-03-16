@@ -3,6 +3,8 @@ use std::{net::SocketAddr, str::FromStr, time::Duration};
 
 mod client;
 mod common;
+mod manager;
+mod message;
 mod server;
 
 #[tokio::main]
@@ -15,10 +17,10 @@ async fn main() -> Result<()> {
         common::make_client_endpoint(client_addr, &[&cert]).map_err(|e| anyhow!("{e}"))?;
 
     println!("Starting Server");
-    let server_handle = tokio::spawn(server::server(server_endpoint));
+    let server_handle = tokio::spawn(server::server_node(server_endpoint));
     tokio::time::sleep(Duration::from_secs(1)).await;
     println!("Starting Client");
-    tokio::spawn(client::client(client_endpoint, server_addr));
+    tokio::spawn(client::client_node(client_endpoint, server_addr));
 
     server_handle.await?
 }

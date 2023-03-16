@@ -3,7 +3,7 @@ use std::{net::SocketAddr, time::Duration};
 use anyhow::Result;
 use quinn::Endpoint;
 
-pub async fn client(endpont: Endpoint, server_addr: SocketAddr) -> Result<()> {
+pub async fn client_node(endpont: Endpoint, server_addr: SocketAddr) -> Result<()> {
     println!("Client: connecting to server {server_addr}");
     let conn = endpont.connect(server_addr, "localhost")?.await?;
     println!("Client: connected to server {server_addr}");

@@ -5,10 +5,11 @@ use quinn::{Connecting, Endpoint, RecvStream, SendStream};
 
 #[derive(Clone)]
 pub struct ServerCtx {
+    #[allow(dead_code)]
     inner: Arc<()>,
 }
 
-pub async fn server(endpoint: Endpoint) -> Result<()> {
+pub async fn server_node(endpoint: Endpoint) -> Result<()> {
     let ctx = ServerCtx {
         inner: Arc::new(()),
     };
